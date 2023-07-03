@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/chirag6398/todoApp/auth"
+	mongodb "github.com/chirag6398/todoApp/database"
+	handler "github.com/chirag6398/todoApp/handlers"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/jwtauth"
@@ -23,25 +25,41 @@ func main() {
 
 	port := os.Getenv("PORT")
 	secretKey := os.Getenv("SECRET_KEY")
-	tokenAuth = jwtauth.New("HS256", []byte(secretKey), nil)
+	var Database = os.Getenv("DATABASE")
+	var UserCollection = os.Getenv("COLLECTION_USER")
+	var ListCollection = os.Getenv("COLLECTION_LIST")
 
-	t := &auth.AuthToken{
-		TokenAuth: tokenAuth,
+	tokenAuth = jwtauth.New("HS256", []byte(secretKey), nil)
+	mongouri := os.Getenv("MONGO_URI")
+
+	mongoClient, err := mongodb.ConnectMongoDb(mongouri)
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	rs := &handler.Resource{
+		TokenAuth:      tokenAuth,
+		Client:         mongoClient,
+		Database:       Database,
+		UserCollection: UserCollection,
+		ListCollection: ListCollection,
 	}
 
 	router.Group(func(r chi.Router) {
 		r.Use(middleware.Logger)
-		r.Post("/register", auth.Register)
-		r.Post("/login", t.Login)
+		r.Post("/register", rs.Register)
+		r.Post("/login", rs.Login)
 
 		r.Group(func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator)
 
-			r.Get("/todo", getAllList)
-			r.Post("/todo", addList)
-			r.Put("/todo/{id}", updateList)
-			r.Delete("/todo/{id}", deleteList)
+			r.Get("/todo", rs.GetAllList)
+			r.Post("/todo", rs.AddList)
+			r.Put("/todo/{id}", rs.UpdateList)
+			r.Delete("/todo/{id}", rs.DeleteList)
 		})
 	})
 
